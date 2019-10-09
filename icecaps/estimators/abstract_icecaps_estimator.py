@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.nn.rnn_cell import LSTMStateTuple
+# TODO: Fix above
 import copy
 import string
 from collections import namedtuple
@@ -219,6 +220,7 @@ class AbstractIcecapsEstimator(tf.estimator.Estimator):
         return result
 
     def get_num_model_params(self):
+        #TODO: Below
         return np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])
 
     def build_optimizer(self, trainable_variables=None):
@@ -245,6 +247,7 @@ class AbstractIcecapsEstimator(tf.estimator.Estimator):
                 raise ValueError("Optimizer " + optimizer + " not recognized. Aborting...")
             with tf.name_scope('gradients'):
                 if not trainable_variables:
+                    # TODO: Below
                     trainable_variables = tf.trainable_variables()
                 gradients = tf.gradients(self.loss, trainable_variables)
                 clipped, norm = tf.clip_by_global_norm(
@@ -254,6 +257,7 @@ class AbstractIcecapsEstimator(tf.estimator.Estimator):
                     grads_and_vars.append((clipped[i], trainable_variables[i]))
                 self.train_op = self.optimizer.apply_gradients(
                     grads_and_vars, global_step=tf.train.get_global_step())
+                #TODO: Fix above
 
     def train(self, input_fn, hooks=[], steps=None, max_steps=None, saving_listeners=None, logging_freq=10):
         try:
@@ -263,6 +267,7 @@ class AbstractIcecapsEstimator(tf.estimator.Estimator):
             tensors_to_log = {"loss": self.reported_loss_name}
             logging_hook = tf.train.LoggingTensorHook(
                 tensors=tensors_to_log, every_n_iter=logging_freq)
+            # TODO: Above
             super().train(input_fn, hooks=hooks+[logging_hook], steps=steps)
             print('Training terminated.')
         except tf.errors.InvalidArgumentError:

@@ -9,7 +9,7 @@ import tensorflow as tf
 def init_rng(seed=0):
     random.seed(seed)
     np.random.seed(seed)
-    tf.set_random_seed(seed)
+    tf.random.set_seed(seed)
 
 def clean_model_dir(model_dir):
     if os.path.isdir(model_dir):
@@ -39,6 +39,4 @@ def load_params(params_file):
 
 def get_gpu_mem_config(dynamic_mem):
     # Configuration for GPU memory usage
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = dynamic_mem
-    return config
+    tf.config.gpu.set_per_process_memory_growth(dynamic_mem)

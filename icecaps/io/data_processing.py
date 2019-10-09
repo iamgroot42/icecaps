@@ -358,7 +358,7 @@ class DataProcessor:
 
     def write_to_tfrecord(self, out_file, pipeline=None, max_lines=None):
         print("Writing to TFRecord..")
-        writer = tf.python_io.TFRecordWriter(out_file)
+        writer = tf.io.TFRecordWriter(out_file)
         line_ctr = 0
         for row in self.row_gen():
             if not self.process_row(pipeline, row):

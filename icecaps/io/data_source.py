@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import random
-from tensorflow.python.data import TFRecordDataset
+from tensorflow.data import TFRecordDataset
 
 from icecaps.util.vocabulary import Vocabulary
 
@@ -17,18 +17,20 @@ class DataSource:
         self.fields = dict()
         for field in fields:
             if fields[field] == "int":
-                self.fields[field] = tf.VarLenFeature(tf.int64)
+                self.fields[field] = tf.io.VarLenFeature(tf.int64)
             elif fields[field] == "float":
-                self.fields[field] = tf.VarLenFeature(tf.float32)
+                self.fields[field] = tf.io.VarLenFeature(tf.float32)
             else:
                 raise ValueError(
                     "Type " + str(fields[field]) + " for field " + str(field) + " is not supported.")
 
     def decode_record(self, record):
+        # TODO :
         data_items_to_decoders = {
             field: tf.contrib.slim.tfexample_decoder.Tensor(field)
             for field in self.fields
         }
+        # TODO :
         decoder = tf.contrib.slim.tfexample_decoder.TFExampleDecoder(
             self.fields, data_items_to_decoders)
         decode_items = list(data_items_to_decoders)
