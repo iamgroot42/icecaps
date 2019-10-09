@@ -13,15 +13,12 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.layers import base as layers_base
-from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import embedding_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import rnn_cell_impl
-from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.platform import tf_logging
-from tensorflow.python.util import nest
 
 
 class BeamSearchDecoder(beam_search_decoder.BeamSearchDecoder):
@@ -140,25 +137,25 @@ class BeamSearchDecoder(beam_search_decoder.BeamSearchDecoder):
             raise ValueError("end_token must be a scalar")
 
         if self._use_go_tokens:
-            self._batch_size = array_ops.size(start_tokens)
+            self._batch_size = tf.size(start_tokens)
         else:
-            self._batch_size = array_ops.size(start_tokens) // beam_width
+            self._batch_size = tf.size(start_tokens) // beam_width
 
         self._beam_width = beam_width
         self._length_penalty_weight = length_penalty_weight
         self._coverage_penalty_weight = coverage_penalty_weight
-        self._initial_cell_state = nest.map_structure(
+        self._initial_cell_state = tf.nest.map_structure(
             self._maybe_split_batch_beams, initial_state, self._cell.state_size)
 
         if self._use_go_tokens:
-            self._start_tokens = array_ops.tile(
-                array_ops.expand_dims(self._start_tokens, 1), [1, self._beam_width])
+            self._start_tokens = tf.tile(
+                tf.expand_dims(self._start_tokens, 1), [1, self._beam_width])
         else:
             self._start_tokens = start_tokens
 
         self._start_inputs = self._embedding_fn(self._start_tokens)
-        self._finished = array_ops.one_hot(
-            array_ops.zeros([self._batch_size], dtype=dtypes.int32),
+        self._finished = tf.one_hot(
+            tf.zeros([self._batch_size], dtype=dtypes.int32),
             depth=self._beam_width,
             on_value=False,
             off_value=True,
@@ -178,11 +175,11 @@ class BeamSearchDecoder(beam_search_decoder.BeamSearchDecoder):
         """
         finished, start_inputs = self._finished, self._start_inputs
 
-        dtype = nest.flatten(self._initial_cell_state)[0].dtype
+        dtype = tf.nest.flatten(self._initial_cell_state)[0].dtype
 
         if self._start_token_logits is None:
-            log_probs = array_ops.one_hot(  # shape(batch_sz, beam_sz)
-                array_ops.zeros([self._batch_size], dtype=dtypes.int32),
+            log_probs = tf.one_hot(  # shape(batch_sz, beam_sz)
+                tf.zeros([self._batch_size], dtype=dtypes.int32),
                 depth=self._beam_width,
                 on_value=ops.convert_to_tensor(0.0, dtype=dtype),
                 off_value=ops.convert_to_tensor(-np.Inf, dtype=dtype),
@@ -190,7 +187,7 @@ class BeamSearchDecoder(beam_search_decoder.BeamSearchDecoder):
         else:
             log_probs = self._start_token_logits
 
-        sequence_lengths = array_ops.zeros(
+        sequence_lengths = tf.zeros(
             [self._batch_size, self._beam_width], dtype=dtypes.int64)
 
         # Start tokens are part of output if no _GO token used. Make changes accordingly
@@ -199,7 +196,7 @@ class BeamSearchDecoder(beam_search_decoder.BeamSearchDecoder):
 
             sequence_lengths = array_ops.where(
                 math_ops.logical_not(finished),
-                array_ops.fill(array_ops.shape(sequence_lengths),
+                tf.fill(tf.shape(sequence_lengths),
                                tf.constant(1, dtype=dtypes.int64)),
                 sequence_lengths)
 
@@ -237,14 +234,14 @@ class BeamSearchDecoder(beam_search_decoder.BeamSearchDecoder):
 
         with ops.name_scope(name, "BeamSearchDecoderStep", (time, inputs, state)):
             cell_state = state.cell_state
-            inputs = nest.map_structure(
+            inputs = tf.nest.map_structure(
                 lambda inp: self._merge_batch_beams(inp, s=inp.shape[2:]), inputs)
-            cell_state = nest.map_structure(self._maybe_merge_batch_beams, cell_state,
+            cell_state = tf.nest.map_structure(self._maybe_merge_batch_beams, cell_state,
                                             self._cell.state_size)
             cell_outputs, next_cell_state = self._cell(inputs, cell_state)
-            cell_outputs = nest.map_structure(
+            cell_outputs = tf.nest.map_structure(
                 lambda out: self._split_batch_beams(out, out.shape[1:]), cell_outputs)
-            next_cell_state = nest.map_structure(
+            next_cell_state = tf.nest.map_structure(
                 self._maybe_split_batch_beams, next_cell_state, self._cell.state_size)
 
             if self._output_layer is not None:
@@ -310,13 +307,10 @@ def _length_penalty(sequence_lengths, penalty_factor):
             the length penalty factor, a tensor with the same shape as
             `sequence_lengths`.
     """
-    penalty_factor = ops.convert_to_tensor(
-        penalty_factor, name="penalty_factor")
-    penalty_factor.set_shape(())  # penalty should be a scalar.
-    static_penalty = tensor_util.constant_value(penalty_factor)
+    static_penalty = tf.constant(penalty_factor, name="penalty_factor")
     if static_penalty is not None and static_penalty == 0:
         return 1.0
-    return math_ops.div((5. + math_ops.to_float(sequence_lengths))
+    return tf.math.divide((5. + tf.cast(sequence_lengths, tf.float32))
                         ** penalty_factor, (5. + 1.)**penalty_factor)
 
 
@@ -338,17 +332,17 @@ def _mask_probs(probs, eos_token, finished):
             beams stay unchanged and finished beams are replaced with a tensor with all
             probability on the EOS token.
     """
-    vocab_size = array_ops.shape(probs)[2]
+    vocab_size = tf.shape(probs)[2]
     # All finished examples are replaced with a vector that has all
     # probability on EOS
 
     # Set the prob mass of the entire beam to EOS
     # this will ensure that the hypotheses that were completed will not turn up again and thus not be considered for TopK
     finished_row = tf.ones([vocab_size], probs.dtype) * probs.dtype.min
-    finished_probs = array_ops.tile(
-        array_ops.reshape(finished_row, [1, 1, -1]),
-        array_ops.concat([array_ops.shape(finished), [1]], 0))
-    finished_mask = array_ops.tile(
-        array_ops.expand_dims(finished, 2), [1, 1, vocab_size])
+    finished_probs = tf.tile(
+        tf.reshape(finished_row, [1, 1, -1]),
+        tf.concat([tf.shape(finished), [1]], 0))
+    finished_mask = tf.tile(
+        tf.expand_dims(finished, 2), [1, 1, vocab_size])
 
     return array_ops.where(finished_mask, finished_probs, probs)
